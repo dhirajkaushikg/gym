@@ -329,16 +329,9 @@ export default function MemberForm({ member, onSave, onCancel }: MemberFormProps
                   <input
                     type="number"
                     id="totalAmount"
-                    min="0"
-                    step="0.01"
+                    
                     value={formData.totalAmount}
-                    onChange={(e) => {
-                      // Use a more precise method to handle decimal inputs
-                      const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                      // Round to 2 decimal places to prevent floating point issues
-                      const roundedValue = Math.round((value + Number.EPSILON) * 100) / 100;
-                      setFormData({ ...formData, totalAmount: roundedValue });
-                    }}
+                    
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base ${errors.totalAmount ? 'border-red-500' : 'border-gray-300'}`}
                   />
                   {errors.totalAmount && <p className="text-red-500 text-sm mt-1">{errors.totalAmount}</p>}
@@ -351,16 +344,9 @@ export default function MemberForm({ member, onSave, onCancel }: MemberFormProps
                   <input
                     type="number"
                     id="amountPaid"
-                    min="0"
-                    step="0.01"
+                    
                     value={formData.amountPaid}
-                    onChange={(e) => {
-                      // Use a more precise method to handle decimal inputs
-                      const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                      // Round to 2 decimal places to prevent floating point issues
-                      const roundedValue = Math.round((value + Number.EPSILON) * 100) / 100;
-                      setFormData({ ...formData, amountPaid: roundedValue });
-                    }}
+                    
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base ${errors.amountPaid ? 'border-red-500' : 'border-gray-300'}`}
                   />
                   {errors.amountPaid && <p className="text-red-500 text-sm mt-1">{errors.amountPaid}</p>}
