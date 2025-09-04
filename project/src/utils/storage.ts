@@ -3,6 +3,8 @@ import { Member } from '../types/member';
 // Use environment variable for backend URL with fallback to localhost
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
+console.log('Backend URL being used:', BACKEND_URL); // Debug log
+
 // Clear any existing localStorage data on application start
 // This ensures we don't have any leftover data from previous versions
 try {
@@ -21,7 +23,10 @@ export const initializeStorage = async (): Promise<void> => {
 export const storageUtils = {
   getMembers: async (): Promise<Member[]> => {
     try {
+      console.log('Attempting to fetch from:', `${BACKEND_URL}/api/members`); // Debug log
       const response = await fetch(`${BACKEND_URL}/api/members`);
+      console.log('Response status:', response.status); // Debug log
+      
       if (response.ok) {
         const members = await response.json();
         console.log('Loading members from backend:', members.length);
@@ -49,6 +54,7 @@ export const storageUtils = {
         return processedMembers;
       } else {
         const errorText = await response.text();
+        console.error('Backend error response:', errorText); // Debug log
         throw new Error(`Backend returned status ${response.status}: ${errorText}`);
       }
     } catch (error) {

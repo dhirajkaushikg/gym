@@ -115,4 +115,9 @@ def delete_member(member_id):
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Use the PORT environment variable provided by Render, default to 5000 for local development
+    port = int(os.environ.get('PORT', 5000))
+    # Check if we're in a production environment
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    print(f"Starting server on port {port} with debug={debug_mode}")
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
