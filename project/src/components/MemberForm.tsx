@@ -98,16 +98,16 @@ export default function MemberForm({ member, onSave, onCancel }: MemberFormProps
 
     if (!validateForm()) return;
 
-    // Ensure values are properly rounded before calculation using more precise method
-    const roundedTotalAmount = Math.round((formData.totalAmount + Number.EPSILON) * 100) / 100;
-    const roundedAmountPaid = Math.round((formData.amountPaid + Number.EPSILON) * 100) / 100;
-    const dueAmount = memberUtils.calculateDueAmount(roundedTotalAmount, roundedAmountPaid);
+    // Ensure values are properly handled as numbers
+    const totalAmount = parseFloat(formData.totalAmount.toString()) || 0;
+    const amountPaid = parseFloat(formData.amountPaid.toString()) || 0;
+    const dueAmount = memberUtils.calculateDueAmount(totalAmount, amountPaid);
 
     const memberData: Member = {
       id: member?.id || memberUtils.generateId(),
       ...formData,
-      totalAmount: roundedTotalAmount,
-      amountPaid: roundedAmountPaid,
+      totalAmount,
+      amountPaid,
       dueAmount
     };
 
@@ -329,9 +329,8 @@ export default function MemberForm({ member, onSave, onCancel }: MemberFormProps
                   <input
                     type="number"
                     id="totalAmount"
-                    
                     value={formData.totalAmount}
-                    
+                    onChange={(e) => setFormData({ ...formData, totalAmount: parseFloat(e.target.value) || 0 })}
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base ${errors.totalAmount ? 'border-red-500' : 'border-gray-300'}`}
                   />
                   {errors.totalAmount && <p className="text-red-500 text-sm mt-1">{errors.totalAmount}</p>}
@@ -344,9 +343,8 @@ export default function MemberForm({ member, onSave, onCancel }: MemberFormProps
                   <input
                     type="number"
                     id="amountPaid"
-                    
                     value={formData.amountPaid}
-                    
+                    onChange={(e) => setFormData({ ...formData, amountPaid: parseFloat(e.target.value) || 0 })}
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base ${errors.amountPaid ? 'border-red-500' : 'border-gray-300'}`}
                   />
                   {errors.amountPaid && <p className="text-red-500 text-sm mt-1">{errors.amountPaid}</p>}
