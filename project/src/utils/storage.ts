@@ -51,6 +51,14 @@ export const storageUtils = {
       
       console.log('Response status:', response.status); // Debug log
       
+      // Check if response is HTML (error page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        const errorText = await response.text();
+        console.error('Received HTML response instead of JSON:', errorText.substring(0, 200) + '...');
+        throw new Error(`Backend returned HTML instead of JSON. Server may be down or endpoint not found. Status: ${response.status}`);
+      }
+      
       if (response.ok) {
         const members = await response.json();
         console.log('Loading members from backend:', members.length);
@@ -119,6 +127,14 @@ export const storageUtils = {
         body: JSON.stringify(member),
       });
       
+      // Check if response is HTML (error page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        const errorText = await response.text();
+        console.error('Received HTML response instead of JSON:', errorText.substring(0, 200) + '...');
+        throw new Error(`Backend returned HTML instead of JSON. Server may be down or endpoint not found. Status: ${response.status}`);
+      }
+      
       if (!response.ok) {
         const errorText = await response.text();
         const errorMessage = `Backend returned status ${response.status}: ${errorText}`;
@@ -166,6 +182,14 @@ export const storageUtils = {
         body: JSON.stringify(memberData),
       });
       
+      // Check if response is HTML (error page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        const errorText = await response.text();
+        console.error('Received HTML response instead of JSON:', errorText.substring(0, 200) + '...');
+        throw new Error(`Backend returned HTML instead of JSON. Server may be down or endpoint not found. Status: ${response.status}`);
+      }
+      
       if (!response.ok) {
         const errorText = await response.text();
         const errorMessage = `Backend returned status ${response.status}: ${errorText}`;
@@ -189,6 +213,14 @@ export const storageUtils = {
       const response = await fetch(`${BACKEND_URL}/api/members/${id}`, {
         method: 'DELETE',
       });
+      
+      // Check if response is HTML (error page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        const errorText = await response.text();
+        console.error('Received HTML response instead of JSON:', errorText.substring(0, 200) + '...');
+        throw new Error(`Backend returned HTML instead of JSON. Server may be down or endpoint not found. Status: ${response.status}`);
+      }
       
       if (!response.ok) {
         const errorText = await response.text();

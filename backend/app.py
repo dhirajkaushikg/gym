@@ -7,6 +7,11 @@ import os
 from dotenv import load_dotenv
 import time
 import traceback
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -23,39 +28,40 @@ MONGODB_URI = os.getenv('MONGODB_URI')
 DB_NAME = os.getenv('DB_NAME')
 COLLECTION_NAME = os.getenv('COLLECTION_NAME')
 
+db = None
+members_collection = None
+
 # Initialize MongoDB client with connection pooling
 try:
-    client = MongoClient(
-        MONGODB_URI,
-        maxPoolSize=50,
-        minPoolSize=10,
-        serverSelectionTimeoutMS=5000,
-        socketTimeoutMS=5000,
-        connectTimeoutMS=5000
-    )
-    # Test the connection
-    client.admin.command('ping')
-    print("MongoDB connection successful")
+    if MONGODB_URI:
+        client = MongoClient(
+            MONGODB_URI,
+            maxPoolSize=50,
+            minPoolSize=10,
+            serverSelectionTimeoutMS=5000,
+            socketTimeoutMS=5000,
+            connectTimeoutMS=5000
+        )
+        # Test the connection
+        client.admin.command('ping')
+        logger.info("MongoDB connection successful")
+        
+        db = client[DB_NAME]
+        members_collection = db[COLLECTION_NAME]
+        
+        # Create indexes for better query performance
+        try:
+            members_collection.create_index([("mId", ASCENDING)], unique=True)
+            members_collection.create_index([("mobile", ASCENDING)])
+            members_collection.create_index([("name", ASCENDING)])
+            members_collection.create_index([("expiryDate", ASCENDING)])
+            logger.info("Database indexes created successfully")
+        except Exception as e:
+            logger.error(f"Error creating indexes: {e}")
+    else:
+        logger.error("MONGODB_URI not found in environment variables")
 except Exception as e:
-    print(f"MongoDB connection failed: {e}")
-    client = None
-
-if client:
-    db = client[DB_NAME]
-    members_collection = db[COLLECTION_NAME]
-    
-    # Create indexes for better query performance
-    try:
-        members_collection.create_index([("mId", ASCENDING)], unique=True)
-        members_collection.create_index([("mobile", ASCENDING)])
-        members_collection.create_index([("name", ASCENDING)])
-        members_collection.create_index([("expiryDate", ASCENDING)])
-        print("Database indexes created successfully")
-    except Exception as e:
-        print(f"Error creating indexes: {e}")
-else:
-    print("Failed to connect to MongoDB. Backend will not function properly.")
-    members_collection = None
+    logger.error(f"MongoDB connection failed: {e}")
 
 # Helper function to convert ObjectId to string
 def member_to_dict(member):
@@ -72,20 +78,35 @@ def start_timer():
 def log_request(response):
     if hasattr(request, 'start_time'):
         duration = time.time() - request.start_time
-        app.logger.info(f"{request.method} {request.path} - {response.status_code} - {duration:.3f}s")
+        logger.info(f"{request.method} {request.path} - {response.status_code} - {duration:.3f}s")
     return response
 
-# Health check endpoint
+# Enhanced health check endpoint
 @app.route('/', methods=['GET'])
 def health_check():
-    if not client:
-        return jsonify({'message': 'Backend server running but MongoDB connection failed'}), 500
-    return jsonify({'message': 'Backend server is running'})
+    status = {
+        'message': 'Backend server is running',
+        'mongodb': {
+            'connected': members_collection is not None,
+            'database': DB_NAME,
+            'collection': COLLECTION_NAME
+        },
+        'environment': {
+            'frontend_url': FRONTEND_URL,
+            'port': os.environ.get('PORT', 5000)
+        }
+    }
+    
+    if members_collection is None:
+        status['message'] = 'Backend server running but MongoDB connection failed'
+        return jsonify(status), 500
+    
+    return jsonify(status)
 
 # Get all members with caching headers
 @app.route('/api/members', methods=['GET'])
 def get_members():
-    if not members_collection:
+    if members_collection is None:
         return jsonify({'error': 'Database connection not available'}), 500
         
     try:
@@ -96,14 +117,14 @@ def get_members():
         response.headers['Expires'] = '0'
         return response
     except Exception as e:
-        app.logger.error(f"Error fetching members: {e}")
-        app.logger.error(traceback.format_exc())
+        logger.error(f"Error fetching members: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': f'Failed to fetch members: {str(e)}'}), 500
 
 # Get a specific member by ID
 @app.route('/api/members/<member_id>', methods=['GET'])
 def get_member(member_id):
-    if not members_collection:
+    if members_collection is None:
         return jsonify({'error': 'Database connection not available'}), 500
         
     try:
@@ -121,19 +142,23 @@ def get_member(member_id):
     except InvalidId:
         return jsonify({'error': 'Invalid member ID format'}), 400
     except Exception as e:
-        app.logger.error(f"Error fetching member {member_id}: {e}")
-        app.logger.error(traceback.format_exc())
+        logger.error(f"Error fetching member {member_id}: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': f'Failed to fetch member: {str(e)}'}), 500
 
 # Create a new member
 @app.route('/api/members', methods=['POST'])
 def create_member():
-    if not members_collection:
+    if members_collection is None:
         return jsonify({'error': 'Database connection not available'}), 500
         
     try:
+        # Check if request has JSON data
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+            
         member_data = request.json
-        app.logger.info(f"Creating member with data: {member_data}")
+        logger.info(f"Creating member with data: {member_data}")
         
         # Validate required fields
         required_fields = ['name', 'mId', 'mobile', 'trainingType', 'address', 
@@ -173,28 +198,32 @@ def create_member():
         member_data['_id'] = str(result.inserted_id)
         
         # Log the operation
-        app.logger.info(f"Created member: {member_data.get('name', 'Unknown')}")
+        logger.info(f"Created member: {member_data.get('name', 'Unknown')}")
         
         response = jsonify(member_to_dict(member_data))
         response.status_code = 201
         return response
     except Exception as e:
-        app.logger.error(f"Error creating member: {e}")
-        app.logger.error(traceback.format_exc())
+        logger.error(f"Error creating member: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': f'Failed to create member: {str(e)}'}), 500
 
 # Update an existing member
 @app.route('/api/members/<member_id>', methods=['PUT'])
 def update_member(member_id):
-    if not members_collection:
+    if members_collection is None:
         return jsonify({'error': 'Database connection not available'}), 500
         
     try:
         # Validate ObjectId format
         ObjectId(member_id)
         
+        # Check if request has JSON data
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+            
         member_data = request.json
-        app.logger.info(f"Updating member {member_id} with data: {member_data}")
+        logger.info(f"Updating member {member_id} with data: {member_data}")
         
         # Validate required fields
         required_fields = ['name', 'mId', 'mobile', 'trainingType', 'address', 
@@ -236,7 +265,7 @@ def update_member(member_id):
         if result.matched_count > 0:
             # Fetch and return the updated member
             updated_member = members_collection.find_one({'_id': ObjectId(member_id)})
-            app.logger.info(f"Updated member: {updated_member.get('name', 'Unknown')}")
+            logger.info(f"Updated member: {updated_member.get('name', 'Unknown')}")
             response = jsonify(member_to_dict(updated_member))
             response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response.headers['Pragma'] = 'no-cache'
@@ -247,14 +276,14 @@ def update_member(member_id):
     except InvalidId:
         return jsonify({'error': 'Invalid member ID format'}), 400
     except Exception as e:
-        app.logger.error(f"Error updating member {member_id}: {e}")
-        app.logger.error(traceback.format_exc())
+        logger.error(f"Error updating member {member_id}: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': f'Failed to update member: {str(e)}'}), 500
 
 # Delete a member
 @app.route('/api/members/<member_id>', methods=['DELETE'])
 def delete_member(member_id):
-    if not members_collection:
+    if members_collection is None:
         return jsonify({'error': 'Database connection not available'}), 500
         
     try:
@@ -264,15 +293,15 @@ def delete_member(member_id):
         result = members_collection.delete_one({'_id': ObjectId(member_id)})
         
         if result.deleted_count > 0:
-            app.logger.info(f"Deleted member with ID: {member_id}")
+            logger.info(f"Deleted member with ID: {member_id}")
             return jsonify({'message': 'Member deleted successfully'})
         else:
             return jsonify({'error': 'Member not found'}), 404
     except InvalidId:
         return jsonify({'error': 'Invalid member ID format'}), 400
     except Exception as e:
-        app.logger.error(f"Error deleting member {member_id}: {e}")
-        app.logger.error(traceback.format_exc())
+        logger.error(f"Error deleting member {member_id}: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': f'Failed to delete member: {str(e)}'}), 500
 
 if __name__ == '__main__':
@@ -280,5 +309,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     # Check if we're in a production environment
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    print(f"Starting server on port {port} with debug={debug_mode}")
+    logger.info(f"Starting server on port {port} with debug={debug_mode}")
     app.run(debug=debug_mode, host='0.0.0.0', port=port)
