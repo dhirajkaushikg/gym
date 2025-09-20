@@ -146,3 +146,48 @@ export const memberUtils = {
     return new Date(dateString).toLocaleDateString('en-IN');
   }
 };
+
+// Function to validate if a member ID is available
+export const isMemberIdAvailable = async (memberId: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/members`);
+    if (response.ok) {
+      const members = await response.json();
+      const existingMember = members.find((member: any) => member.mId === memberId);
+      return !existingMember;
+    }
+    return true; // If we can't fetch members, assume ID is available
+  } catch (error) {
+    console.error('Error checking member ID availability:', error);
+    return true; // If there's an error, assume ID is available
+  }
+};
+
+// Function to suggest the next available member ID
+export const suggestNextMemberId = async (): Promise<string> => {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/members`);
+    if (response.ok) {
+      const members = await response.json();
+      
+      // Extract existing numeric IDs
+      const existingIds = members
+        .map((member: any) => member.mId)
+        .filter((id: string) => id && /^\d+$/.test(id))
+        .map((id: string) => parseInt(id, 10))
+        .sort((a: number, b: number) => a - b);
+      
+      // Find the next available ID
+      if (existingIds.length > 0) {
+        const nextId = Math.max(...existingIds) + 1;
+        return nextId.toString().padStart(3, '0'); // Format as 3-digit number with leading zeros
+      } else {
+        return '001';
+      }
+    }
+    return '001'; // Default if we can't fetch members
+  } catch (error) {
+    console.error('Error suggesting next member ID:', error);
+    return '001'; // Default if there's an error
+  }
+};

@@ -147,7 +147,28 @@ export const storageUtils = {
         const errorText = await response.text();
         const errorMessage = `Backend returned status ${response.status}: ${errorText}`;
         console.error('Error adding member to backend:', errorMessage);
-        throw new Error(errorMessage);
+        
+        // Parse the error response to provide better user feedback
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error) {
+            // Check for specific error types
+            if (response.status === 409) {
+              // Conflict error (duplicate key)
+              throw new Error(errorData.error);
+            } else if (response.status === 400) {
+              // Bad request error
+              throw new Error(`Invalid data: ${errorData.error}`);
+            } else {
+              throw new Error(errorData.error);
+            }
+          } else {
+            throw new Error(errorMessage);
+          }
+        } catch (parseError) {
+          // If we can't parse the error as JSON, use the original error message
+          throw new Error(errorMessage);
+        }
       }
       
       console.log('Added member to backend:', member.name);

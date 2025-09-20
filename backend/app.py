@@ -417,6 +417,25 @@ def create_member():
     except Exception as e:
         logger.error(f"Error creating member: {e}")
         logger.error(traceback.format_exc())
+        
+        # Handle specific MongoDB errors
+        error_message = str(e)
+        if "E11000 duplicate key error" in error_message:
+            # Extract the duplicate field from the error message
+            import re
+            match = re.search(r'dup key: { ([^:]+): "([^"]+)" }', error_message)
+            if match:
+                field_name = match.group(1)
+                field_value = match.group(2)
+                if field_name == "mId":
+                    return jsonify({'error': f'A member with ID "{field_value}" already exists. Please use a different Member ID.'}), 409
+                else:
+                    return jsonify({'error': f'A member with {field_name} "{field_value}" already exists.'}), 409
+            else:
+                return jsonify({'error': 'A member with this ID already exists. Please use a different Member ID.'}), 409
+        elif "duplicate key error" in error_message.lower():
+            return jsonify({'error': 'A member with this ID already exists. Please use a different Member ID.'}), 409
+        
         return jsonify({'error': f'Failed to create member: {str(e)}'}), 500
 
 # Update an existing member
