@@ -19,103 +19,10 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-# Simple CORS middleware that manually adds headers to all responses
-@app.after_request
-def after_request(response):
-    # Get the origin from the request
-    origin = request.headers.get('Origin')
-    
-    # List of allowed origins
-    allowed_origins = [
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
-        'https://gym-backend-kixz.onrender.com',
-        'https://*.netlify.app',
-        'https://*.vercel.app'
-    ]
-    
-    # Check if origin is in allowed origins or if it's a Vercel deployment
-    if origin:
-        # Check if it matches any of the allowed patterns
-        is_allowed = False
-        for allowed_origin in allowed_origins:
-            if allowed_origin == origin or (allowed_origin.startswith('https://*.') and origin.startswith('https://' + allowed_origin[10:])):
-                is_allowed = True
-                break
-            # Special case for Vercel deployments
-            if 'vercel.app' in origin and 'vercel.app' in allowed_origin:
-                is_allowed = True
-                break
-                
-        if is_allowed:
-            response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            # Allow all for testing (you might want to remove this in production)
-            response.headers['Access-Control-Allow-Origin'] = origin
-    else:
-        # If no origin, allow all
-        response.headers['Access-Control-Allow-Origin'] = '*'
-    
-    # Add all necessary CORS headers
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    
-    # Add security headers
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    
-    return response
-
-# Handle preflight OPTIONS requests
-@app.before_request
-def handle_options():
-    if request.method == 'OPTIONS':
-        response = make_response()
-        origin = request.headers.get('Origin')
-        
-        # List of allowed origins
-        allowed_origins = [
-            'http://localhost:5173',
-            'http://localhost:5174',
-            'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
-            'https://gym-backend-kixz.onrender.com',
-            'https://*.netlify.app',
-            'https://*.vercel.app'
-        ]
-        
-        # Check if origin is in allowed origins
-        if origin:
-            is_allowed = False
-            for allowed_origin in allowed_origins:
-                if allowed_origin == origin or (allowed_origin.startswith('https://*.') and origin.startswith('https://' + allowed_origin[10:])):
-                    is_allowed = True
-                    break
-                # Special case for Vercel deployments
-                if 'vercel.app' in origin and 'vercel.app' in allowed_origin:
-                    is_allowed = True
-                    break
-                    
-            if is_allowed:
-                response.headers['Access-Control-Allow-Origin'] = origin
-            else:
-                # Allow all for testing
-                response.headers['Access-Control-Allow-Origin'] = origin
-        else:
-            response.headers['Access-Control-Allow-Origin'] = '*'
-        
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
-        response.headers['Access-Control-Max-Age'] = '3600'
-        response.status_code = 200
-        return response
-
-# Configure CORS using flask-cors as a fallback
+# Get FRONTEND_URL from environment variables first
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 
+# Configure CORS with comprehensive settings
 cors_config = {
     "origins": [
         FRONTEND_URL,
@@ -124,7 +31,8 @@ cors_config = {
         'https://*.netlify.app',
         'https://*.vercel.app',
         'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
-        'https://gym-backend-kixz.onrender.com'
+        'https://gym-backend-kixz.onrender.com',
+        'https://efcgym.vercel.app'  # Add your new Vercel domain
     ],
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     "allow_headers": [
@@ -137,6 +45,7 @@ cors_config = {
     "max_age": 3600
 }
 
+# Configure CORS using flask-cors as a fallback
 CORS(app, **cors_config)
 
 # Add a middleware to log request processing time
@@ -220,12 +129,14 @@ def health_check():
         },
         'cors': {
             'allowed_origins': [
+                FRONTEND_URL,
                 'http://localhost:5173',
                 'http://localhost:5174',
                 'https://*.netlify.app',
                 'https://*.vercel.app',
                 'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
-                'https://gym-backend-kixz.onrender.com'
+                'https://gym-backend-kixz.onrender.com',
+                'https://efcgym.vercel.app'  # Add your new Vercel domain
             ]
         }
     }
@@ -616,6 +527,112 @@ def delete_member(member_id):
         logger.error(f"Error deleting member {member_id}: {e}")
         logger.error(traceback.format_exc())
         return jsonify({'error': f'Failed to delete member: {str(e)}'}), 500
+
+# Enhanced CORS middleware that manually adds headers to all responses
+@app.after_request
+def after_request(response):
+    # Get the origin from the request
+    origin = request.headers.get('Origin')
+    
+    # List of allowed origins
+    allowed_origins = [
+        FRONTEND_URL,  # Use the environment variable
+        'http://localhost:5173',
+        'http://localhost:5734',
+        'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
+        'https://gym-backend-kixz.onrender.com',
+        'https://*.netlify.app',
+        'https://*.vercel.app',
+        'https://efcgym.vercel.app'  # Add your new Vercel domain
+    ]
+    
+    # Check if origin is in allowed origins or if it's a Vercel deployment
+    if origin:
+        # Check if it matches any of the allowed patterns
+        is_allowed = False
+        for allowed_origin in allowed_origins:
+            if allowed_origin == origin or (allowed_origin.startswith('https://*.') and origin.startswith('https://' + allowed_origin[10:])):
+                is_allowed = True
+                break
+            # Special case for Vercel deployments
+            if 'vercel.app' in origin and 'vercel.app' in allowed_origin:
+                is_allowed = True
+                break
+            # Special case for your specific domain
+            if origin == 'https://efcgym.vercel.app':
+                is_allowed = True
+                break
+                
+        if is_allowed:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            # Allow all for testing (you might want to remove this in production)
+            response.headers['Access-Control-Allow-Origin'] = origin
+    else:
+        # If no origin, allow all
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    # Add all necessary CORS headers
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    
+    # Add security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    
+    return response
+
+# Handle preflight OPTIONS requests
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        response = make_response()
+        origin = request.headers.get('Origin')
+        
+        # List of allowed origins
+        allowed_origins = [
+            FRONTEND_URL,  # Use the environment variable
+            'http://localhost:5173',
+            'http://localhost:5174',
+            'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
+            'https://gym-backend-kixz.onrender.com',
+            'https://*.netlify.app',
+            'https://*.vercel.app',
+            'https://efcgym.vercel.app'  # Add your new Vercel domain
+        ]
+        
+        # Check if origin is in allowed origins
+        if origin:
+            is_allowed = False
+            for allowed_origin in allowed_origins:
+                if allowed_origin == origin or (allowed_origin.startswith('https://*.') and origin.startswith('https://' + allowed_origin[10:])):
+                    is_allowed = True
+                    break
+                # Special case for Vercel deployments
+                if 'vercel.app' in origin and 'vercel.app' in allowed_origin:
+                    is_allowed = True
+                    break
+                # Special case for your specific domain
+                if origin == 'https://efcgym.vercel.app':
+                    is_allowed = True
+                    break
+                    
+            if is_allowed:
+                response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                # Allow all for testing
+                response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+        
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        response.status_code = 200
+        return response
 
 if __name__ == '__main__':
     # Use the PORT environment variable provided by Render, default to 5000 for local development
