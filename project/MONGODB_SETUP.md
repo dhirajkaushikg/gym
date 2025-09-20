@@ -110,7 +110,7 @@
    MONGODB_URI=mongodb+srv://dhirajkaushikg_db_user:i7NgJDG18XZA0swX@gymmembership.cjz3e8i.mongodb.net/
    DB_NAME=Members
    COLLECTION_NAME=Members List
-   ```
+   ```      
 
 6. (Optional) Initialize the database:
    ```bash

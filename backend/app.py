@@ -19,10 +19,103 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-# Configure CORS for different environments with more permissive settings
+# Simple CORS middleware that manually adds headers to all responses
+@app.after_request
+def after_request(response):
+    # Get the origin from the request
+    origin = request.headers.get('Origin')
+    
+    # List of allowed origins
+    allowed_origins = [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
+        'https://gym-backend-kixz.onrender.com',
+        'https://*.netlify.app',
+        'https://*.vercel.app'
+    ]
+    
+    # Check if origin is in allowed origins or if it's a Vercel deployment
+    if origin:
+        # Check if it matches any of the allowed patterns
+        is_allowed = False
+        for allowed_origin in allowed_origins:
+            if allowed_origin == origin or (allowed_origin.startswith('https://*.') and origin.startswith('https://' + allowed_origin[10:])):
+                is_allowed = True
+                break
+            # Special case for Vercel deployments
+            if 'vercel.app' in origin and 'vercel.app' in allowed_origin:
+                is_allowed = True
+                break
+                
+        if is_allowed:
+            response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            # Allow all for testing (you might want to remove this in production)
+            response.headers['Access-Control-Allow-Origin'] = origin
+    else:
+        # If no origin, allow all
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    # Add all necessary CORS headers
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    
+    # Add security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    
+    return response
+
+# Handle preflight OPTIONS requests
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        response = make_response()
+        origin = request.headers.get('Origin')
+        
+        # List of allowed origins
+        allowed_origins = [
+            'http://localhost:5173',
+            'http://localhost:5174',
+            'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
+            'https://gym-backend-kixz.onrender.com',
+            'https://*.netlify.app',
+            'https://*.vercel.app'
+        ]
+        
+        # Check if origin is in allowed origins
+        if origin:
+            is_allowed = False
+            for allowed_origin in allowed_origins:
+                if allowed_origin == origin or (allowed_origin.startswith('https://*.') and origin.startswith('https://' + allowed_origin[10:])):
+                    is_allowed = True
+                    break
+                # Special case for Vercel deployments
+                if 'vercel.app' in origin and 'vercel.app' in allowed_origin:
+                    is_allowed = True
+                    break
+                    
+            if is_allowed:
+                response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                # Allow all for testing
+                response.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+        
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        response.status_code = 200
+        return response
+
+# Configure CORS using flask-cors as a fallback
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 
-# Configure CORS with comprehensive settings
 cors_config = {
     "origins": [
         FRONTEND_URL,
@@ -45,6 +138,19 @@ cors_config = {
 }
 
 CORS(app, **cors_config)
+
+# Add a middleware to log request processing time
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def log_request(response):
+    # This will run after the first after_request, adding timing info
+    if hasattr(request, 'start_time'):
+        duration = time.time() - request.start_time
+        logger.info(f"{request.method} {request.path} - {response.status_code} - {duration:.3f}s")
+    return response
 
 # MongoDB connection
 MONGODB_URI = os.getenv('MONGODB_URI')
@@ -98,56 +204,6 @@ def member_to_dict(member):
         member['_id'] = str(member['_id'])
     return member
 
-# Add a middleware to log request processing time and handle CORS
-@app.before_request
-def start_timer():
-    request.start_time = time.time()
-
-@app.after_request
-def after_request(response):
-    # Add comprehensive CORS headers
-    origin = request.headers.get('Origin')
-    if origin:
-        response.headers['Access-Control-Allow-Origin'] = origin
-    else:
-        # Allow all origins if specific origin not provided
-        response.headers['Access-Control-Allow-Origin'] = '*'
-    
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    
-    # Add security headers
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    
-    # Log request processing time
-    if hasattr(request, 'start_time'):
-        duration = time.time() - request.start_time
-        logger.info(f"{request.method} {request.path} - {response.status_code} - {duration:.3f}s")
-    
-    return response
-
-# Handle preflight OPTIONS requests explicitly
-@app.route('/', methods=['OPTIONS'])
-@app.route('/api/members', methods=['OPTIONS'])
-@app.route('/api/members/<path:path>', methods=['OPTIONS'])
-def handle_options(**kwargs):
-    response = make_response()
-    origin = request.headers.get('Origin')
-    if origin:
-        response.headers['Access-Control-Allow-Origin'] = origin
-    else:
-        response.headers['Access-Control-Allow-Origin'] = '*'
-    
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    response.status_code = 200
-    return response
-
 # Enhanced health check endpoint
 @app.route('/', methods=['GET'])
 def health_check():
@@ -161,6 +217,16 @@ def health_check():
         'environment': {
             'frontend_url': FRONTEND_URL,
             'port': os.environ.get('PORT', 5000)
+        },
+        'cors': {
+            'allowed_origins': [
+                'http://localhost:5173',
+                'http://localhost:5174',
+                'https://*.netlify.app',
+                'https://*.vercel.app',
+                'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
+                'https://gym-backend-kixz.onrender.com'
+            ]
         }
     }
     
@@ -169,6 +235,15 @@ def health_check():
         status['storage_type'] = 'in-memory'
     
     return jsonify(status)
+
+# Add a specific CORS test endpoint
+@app.route('/cors-test', methods=['GET', 'OPTIONS'])
+def cors_test():
+    return jsonify({
+        'message': 'CORS headers are working correctly!',
+        'origin_received': request.headers.get('Origin', 'No Origin header'),
+        'method': request.method
+    })
 
 # Get all members with caching headers
 @app.route('/api/members', methods=['GET'])
