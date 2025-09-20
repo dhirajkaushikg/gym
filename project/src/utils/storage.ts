@@ -44,12 +44,14 @@ export const storageUtils = {
       const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 second timeout
       
       const response = await fetch(`${BACKEND_URL}/api/members`, {
-        signal: controller.signal
+        signal: controller.signal,
+        credentials: 'include' // Include credentials for CORS
       });
       
       clearTimeout(timeoutId);
       
       console.log('Response status:', response.status); // Debug log
+      console.log('Response headers:', [...response.headers.entries()]); // Debug log
       
       // Check if response is HTML (error page) instead of JSON
       const contentType = response.headers.get('content-type');
@@ -100,6 +102,11 @@ export const storageUtils = {
         console.error('Request timeout while loading members from backend');
         throw new Error('Request timeout - backend is taking too long to respond');
       }
+      // Handle CORS errors specifically
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error('Network error or CORS issue:', error);
+        throw new Error('Network error - unable to connect to backend server. This may be due to CORS policy restrictions.');
+      }
       console.error('Error loading members from backend:', error);
       // Return empty array - no localStorage fallback
       throw error; // Re-throw the error so the UI can handle it properly
@@ -125,6 +132,7 @@ export const storageUtils = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(member),
+        credentials: 'include' // Include credentials for CORS
       });
       
       // Check if response is HTML (error page) instead of JSON
@@ -180,6 +188,7 @@ export const storageUtils = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(memberData),
+        credentials: 'include' // Include credentials for CORS
       });
       
       // Check if response is HTML (error page) instead of JSON
@@ -212,6 +221,7 @@ export const storageUtils = {
       // The backend expects the MongoDB _id in the URL
       const response = await fetch(`${BACKEND_URL}/api/members/${id}`, {
         method: 'DELETE',
+        credentials: 'include' // Include credentials for CORS
       });
       
       // Check if response is HTML (error page) instead of JSON

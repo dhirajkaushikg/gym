@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from pymongo import MongoClient, ASCENDING
 from bson import ObjectId
@@ -19,9 +19,32 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-# Configure CORS for different environments
+# Configure CORS for different environments with more permissive settings
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-CORS(app, origins=[FRONTEND_URL, 'http://localhost:5173', 'http://localhost:5174', 'https://*.netlify.app', 'https://*.vercel.app'])
+
+# Configure CORS with comprehensive settings
+cors_config = {
+    "origins": [
+        FRONTEND_URL,
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'https://*.netlify.app',
+        'https://*.vercel.app',
+        'https://gym-git-main-dhirus-projects-0e28fcdd.vercel.app',
+        'https://gym-backend-kixz.onrender.com'
+    ],
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allow_headers": [
+        "Content-Type",
+        "Authorization",
+        "Access-Control-Allow-Origin",
+        "Access-Control-Allow-Credentials"
+    ],
+    "supports_credentials": True,
+    "max_age": 3600
+}
+
+CORS(app, **cors_config)
 
 # MongoDB connection
 MONGODB_URI = os.getenv('MONGODB_URI')
@@ -75,16 +98,54 @@ def member_to_dict(member):
         member['_id'] = str(member['_id'])
     return member
 
-# Add a middleware to log request processing time
+# Add a middleware to log request processing time and handle CORS
 @app.before_request
 def start_timer():
     request.start_time = time.time()
 
 @app.after_request
-def log_request(response):
+def after_request(response):
+    # Add comprehensive CORS headers
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    else:
+        # Allow all origins if specific origin not provided
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    
+    # Add security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    
+    # Log request processing time
     if hasattr(request, 'start_time'):
         duration = time.time() - request.start_time
         logger.info(f"{request.method} {request.path} - {response.status_code} - {duration:.3f}s")
+    
+    return response
+
+# Handle preflight OPTIONS requests explicitly
+@app.route('/', methods=['OPTIONS'])
+@app.route('/api/members', methods=['OPTIONS'])
+@app.route('/api/members/<path:path>', methods=['OPTIONS'])
+def handle_options(**kwargs):
+    response = make_response()
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    else:
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Access-Control-Allow-Origin, Access-Control-Allow-Credentials'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    response.status_code = 200
     return response
 
 # Enhanced health check endpoint
