@@ -41,7 +41,7 @@ export const storageUtils = {
     try {
       console.log('Attempting to fetch from:', `${BACKEND_URL}/api/members`); // Debug log
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 second timeout
       
       const response = await fetch(`${BACKEND_URL}/api/members`, {
         signal: controller.signal

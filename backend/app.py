@@ -41,9 +41,11 @@ try:
             MONGODB_URI,
             maxPoolSize=50,
             minPoolSize=10,
-            serverSelectionTimeoutMS=5000,
-            socketTimeoutMS=5000,
-            connectTimeoutMS=5000
+            serverSelectionTimeoutMS=10000,  # Increased to 10 seconds
+            socketTimeoutMS=10000,           # Increased to 10 seconds
+            connectTimeoutMS=10000,          # Increased to 10 seconds
+            retryWrites=True,
+            retryReads=True
         )
         # Test the connection
         client.admin.command('ping')
