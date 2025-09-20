@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>API Test Page</h1>
+    <button onclick="fetchMembers()">Fetch Members</button>
+    <div id="result"></div>
+
+    <script>
+        async function fetchMembers() {
+            try {
+                const response = await fetch('http://localhost:5000/api/members');
+                const members = await response.json();
+                document.getElementById('result').innerHTML = 
+                    '<h2>Members:</h2><pre>' + JSON.stringify(members, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    '<h2>Error:</h2><pre>' + error.toString() + '</pre>';
+            }
+        }
+    </script>
+</body>
+</html>

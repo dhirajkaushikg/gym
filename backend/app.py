@@ -31,6 +31,9 @@ COLLECTION_NAME = os.getenv('COLLECTION_NAME')
 db = None
 members_collection = None
 
+# In-memory storage as fallback when MongoDB is not available
+in_memory_storage = []
+
 # Initialize MongoDB client with connection pooling
 try:
     if MONGODB_URI:
@@ -59,9 +62,10 @@ try:
         except Exception as e:
             logger.error(f"Error creating indexes: {e}")
     else:
-        logger.error("MONGODB_URI not found in environment variables")
+        logger.warning("MONGODB_URI not found in environment variables - using in-memory storage")
 except Exception as e:
     logger.error(f"MongoDB connection failed: {e}")
+    logger.warning("Using in-memory storage as fallback")
 
 # Helper function to convert ObjectId to string
 def member_to_dict(member):
@@ -98,16 +102,21 @@ def health_check():
     }
     
     if members_collection is None:
-        status['message'] = 'Backend server running but MongoDB connection failed'
-        return jsonify(status), 500
+        status['message'] = 'Backend server running but MongoDB connection failed - using in-memory storage'
+        status['storage_type'] = 'in-memory'
     
     return jsonify(status)
 
 # Get all members with caching headers
 @app.route('/api/members', methods=['GET'])
 def get_members():
+    # Use in-memory storage if MongoDB is not available
     if members_collection is None:
-        return jsonify({'error': 'Database connection not available'}), 500
+        response = jsonify([member_to_dict(member) for member in in_memory_storage])
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
         
     try:
         members = list(members_collection.find())
@@ -124,9 +133,19 @@ def get_members():
 # Get a specific member by ID
 @app.route('/api/members/<member_id>', methods=['GET'])
 def get_member(member_id):
+    # Use in-memory storage if MongoDB is not available
     if members_collection is None:
-        return jsonify({'error': 'Database connection not available'}), 500
-        
+        # Find member in in-memory storage
+        member = next((m for m in in_memory_storage if str(m.get('_id', m.get('id', ''))) == member_id), None)
+        if member:
+            response = jsonify(member_to_dict(member))
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+        else:
+            return jsonify({'error': 'Member not found'}), 404
+    
     try:
         # Validate ObjectId format
         ObjectId(member_id)
@@ -149,9 +168,63 @@ def get_member(member_id):
 # Create a new member
 @app.route('/api/members', methods=['POST'])
 def create_member():
+    # Use in-memory storage if MongoDB is not available
     if members_collection is None:
-        return jsonify({'error': 'Database connection not available'}), 500
-        
+        try:
+            # Check if request has JSON data
+            if not request.is_json:
+                return jsonify({'error': 'Request must be JSON'}), 400
+                
+            member_data = request.json
+            logger.info(f"Creating member with data: {member_data}")
+            
+            # Validate required fields
+            required_fields = ['name', 'mId', 'mobile', 'trainingType', 'address', 
+                              'idProof', 'batch', 'planType', 'purchaseDate', 
+                              'expiryDate', 'totalAmount', 'amountPaid', 'dueAmount', 
+                              'paymentDetails']
+            
+            missing_fields = [field for field in required_fields if field not in member_data]
+            if missing_fields:
+                return jsonify({'error': f'Missing required fields: {missing_fields}'}), 400
+                
+            # Generate a simple ID for in-memory storage
+            import uuid
+            member_id = str(uuid.uuid4())
+            member_data['_id'] = member_id
+            member_data['id'] = member_id  # For consistency with frontend
+            
+            # Validate numeric fields
+            try:
+                member_data['totalAmount'] = float(member_data['totalAmount'])
+                member_data['amountPaid'] = float(member_data['amountPaid'])
+                member_data['dueAmount'] = float(member_data['dueAmount'])
+            except (ValueError, TypeError) as e:
+                return jsonify({'error': f'Invalid numeric values: {str(e)}'}), 400
+                
+            # Validate date fields
+            try:
+                # This will raise ValueError if dates are invalid
+                from datetime import datetime
+                datetime.strptime(member_data['purchaseDate'], '%Y-%m-%d')
+                datetime.strptime(member_data['expiryDate'], '%Y-%m-%d')
+            except ValueError as e:
+                return jsonify({'error': f'Invalid date format. Use YYYY-MM-DD: {str(e)}'}), 400
+                
+            # Add to in-memory storage
+            in_memory_storage.append(member_data)
+            
+            # Log the operation
+            logger.info(f"Created member: {member_data.get('name', 'Unknown')}")
+            
+            response = jsonify(member_to_dict(member_data))
+            response.status_code = 201
+            return response
+        except Exception as e:
+            logger.error(f"Error creating member: {e}")
+            logger.error(traceback.format_exc())
+            return jsonify({'error': f'Failed to create member: {str(e)}'}), 500
+    
     try:
         # Check if request has JSON data
         if not request.is_json:
@@ -211,9 +284,72 @@ def create_member():
 # Update an existing member
 @app.route('/api/members/<member_id>', methods=['PUT'])
 def update_member(member_id):
+    # Use in-memory storage if MongoDB is not available
     if members_collection is None:
-        return jsonify({'error': 'Database connection not available'}), 500
-        
+        try:
+            # Check if request has JSON data
+            if not request.is_json:
+                return jsonify({'error': 'Request must be JSON'}), 400
+                
+            member_data = request.json
+            logger.info(f"Updating member {member_id} with data: {member_data}")
+            
+            # Validate required fields
+            required_fields = ['name', 'mId', 'mobile', 'trainingType', 'address', 
+                              'idProof', 'batch', 'planType', 'purchaseDate', 
+                              'expiryDate', 'totalAmount', 'amountPaid', 'dueAmount', 
+                              'paymentDetails']
+            
+            missing_fields = [field for field in required_fields if field not in member_data]
+            if missing_fields:
+                return jsonify({'error': f'Missing required fields: {missing_fields}'}), 400
+                
+            # Find and update member in in-memory storage
+            member_index = None
+            for i, m in enumerate(in_memory_storage):
+                if str(m.get('_id', m.get('id', ''))) == member_id:
+                    member_index = i
+                    break
+            
+            if member_index is None:
+                return jsonify({'error': 'Member not found'}), 404
+                
+            # Update the member data
+            member_data['_id'] = member_id
+            member_data['id'] = member_id  # For consistency with frontend
+            
+            # Validate numeric fields
+            try:
+                member_data['totalAmount'] = float(member_data['totalAmount'])
+                member_data['amountPaid'] = float(member_data['amountPaid'])
+                member_data['dueAmount'] = float(member_data['dueAmount'])
+            except (ValueError, TypeError) as e:
+                return jsonify({'error': f'Invalid numeric values: {str(e)}'}), 400
+                
+            # Validate date fields
+            try:
+                # This will raise ValueError if dates are invalid
+                from datetime import datetime
+                datetime.strptime(member_data['purchaseDate'], '%Y-%m-%d')
+                datetime.strptime(member_data['expiryDate'], '%Y-%m-%d')
+            except ValueError as e:
+                return jsonify({'error': f'Invalid date format. Use YYYY-MM-DD: {str(e)}'}), 400
+                
+            # Update in in-memory storage
+            in_memory_storage[member_index] = member_data
+            
+            # Log the operation
+            logger.info(f"Updated member: {member_data.get('name', 'Unknown')}")
+            response = jsonify(member_to_dict(member_data))
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+        except Exception as e:
+            logger.error(f"Error updating member {member_id}: {e}")
+            logger.error(traceback.format_exc())
+            return jsonify({'error': f'Failed to update member: {str(e)}'}), 500
+    
     try:
         # Validate ObjectId format
         ObjectId(member_id)
@@ -283,9 +419,29 @@ def update_member(member_id):
 # Delete a member
 @app.route('/api/members/<member_id>', methods=['DELETE'])
 def delete_member(member_id):
+    # Use in-memory storage if MongoDB is not available
     if members_collection is None:
-        return jsonify({'error': 'Database connection not available'}), 500
-        
+        try:
+            # Find and remove member from in-memory storage
+            member_index = None
+            for i, m in enumerate(in_memory_storage):
+                if str(m.get('_id', m.get('id', ''))) == member_id:
+                    member_index = i
+                    break
+            
+            if member_index is None:
+                return jsonify({'error': 'Member not found'}), 404
+                
+            # Remove from in-memory storage
+            deleted_member = in_memory_storage.pop(member_index)
+            
+            logger.info(f"Deleted member with ID: {member_id}")
+            return jsonify({'message': 'Member deleted successfully'})
+        except Exception as e:
+            logger.error(f"Error deleting member {member_id}: {e}")
+            logger.error(traceback.format_exc())
+            return jsonify({'error': f'Failed to delete member: {str(e)}'}), 500
+    
     try:
         # Validate ObjectId format
         ObjectId(member_id)
