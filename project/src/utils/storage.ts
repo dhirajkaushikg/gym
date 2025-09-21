@@ -50,10 +50,10 @@ export const storageUtils = {
     try {
       console.log('Attempting to fetch from:', `${BACKEND_URL}/api/members`); // Debug log
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // Set to 15 seconds
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds for better reliability
       
-      // Add pagination parameters to improve performance
-      const fetchPromise = fetch(`${BACKEND_URL}/api/members?page=1&per_page=100`, {
+      // Use smaller page size to improve performance
+      const fetchPromise = fetch(`${BACKEND_URL}/api/members?page=1&per_page=25`, {
         signal: controller.signal,
         credentials: 'include' // Include credentials for CORS
       });
@@ -119,12 +119,12 @@ export const storageUtils = {
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.error('Request timeout while loading members from backend');
-        throw new Error('Request timeout - backend is taking too long to respond. Please check if the backend server is running and MongoDB is accessible.');
+        throw new Error('Request timeout - backend is taking too long to respond. Please check if the backend server is running and accessible.');
       }
       // Handle CORS errors specifically
       if (error instanceof TypeError && error.message.includes('fetch')) {
         console.error('Network error or CORS issue:', error);
-        throw new Error('Network error - unable to connect to backend server. Please ensure the backend server is running on http://localhost:5000 and there are no firewall restrictions.');
+        throw new Error('Network error - unable to connect to backend server. Please ensure you are using the correct backend URL and there are no network restrictions.');
       }
       console.error('Error loading members from backend:', error);
       // Return empty array - no localStorage fallback

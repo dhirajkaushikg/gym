@@ -68,7 +68,16 @@ function App() {
       setMembers(loadedMembers);
     } catch (err: any) {
       console.error('Error loading members:', err);
-      setError(err.message || 'Failed to load members. Please try again.');
+      // Provide more specific error messages based on the error type
+      if (err.message.includes('timeout')) {
+        setError('The server is taking too long to respond. This might be due to a large number of members or network issues. Please try again in a moment.');
+      } else if (err.message.includes('Network error')) {
+        setError('Unable to connect to the server. Please check your internet connection and ensure the backend server is running.');
+      } else if (err.message.includes('CORS')) {
+        setError('There is a configuration issue with the server. Please contact the administrator.');
+      } else {
+        setError(err.message || 'Failed to load members. Please try again.');
+      }
     } finally {
       // Clear the ref when request completes
       loadMembersRef.current = null;

@@ -160,12 +160,13 @@ def get_members():
         return response
         
     try:
-        # Add pagination support
+        # Add pagination support with smaller default page size
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))  # Default to 50 members per page
+        per_page = int(request.args.get('per_page', 25))  # Reduced to 25 members per page
         skip = (page - 1) * per_page
         
-        members = list(members_collection.find().skip(skip).limit(per_page))
+        # Add sorting by _id for consistent pagination
+        members = list(members_collection.find().sort('_id', 1).skip(skip).limit(per_page))
         response = jsonify([member_to_dict(member) for member in members])
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
