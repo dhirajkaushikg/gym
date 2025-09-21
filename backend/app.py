@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import time
 import traceback
 import logging
+from functools import wraps
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -156,8 +157,9 @@ def cors_test():
         'method': request.method
     })
 
-# Get all members with caching headers
+# Get all members with caching headers and concurrency limiting
 @app.route('/api/members', methods=['GET'])
+@limit_concurrent_requests
 def get_members():
     # Use in-memory storage if MongoDB is not available
     if members_collection is None:

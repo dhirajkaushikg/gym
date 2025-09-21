@@ -7,6 +7,9 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 let membersCache: { data: Member[]; timestamp: number } | null = null;
 const CACHE_DURATION = 1000; // 1 second cache
 
+// Variable to track ongoing requests
+let ongoingRequest: Promise<Member[]> | null = null;
+
 console.log('Backend URL being used:', BACKEND_URL); // Debug log
 
 // Clear any existing localStorage data on application start
@@ -30,7 +33,7 @@ const invalidateCache = (): void => {
 };
 
 export const storageUtils = {
-  getMembers: async (): Promise<Member[]> => {
+  getMembers: async (retryCount = 3): Promise<Member[]> => {
     // Check if we have valid cached data
     const now = Date.now();
     if (membersCache && (now - membersCache.timestamp) < CACHE_DURATION) {
@@ -38,80 +41,116 @@ export const storageUtils = {
       return membersCache.data;
     }
 
-    try {
-      console.log('Attempting to fetch from:', `${BACKEND_URL}/api/members`); // Debug log
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased to 30 seconds
-      
-      // Add pagination parameters to improve performance
-      const response = await fetch(`${BACKEND_URL}/api/members?page=1&per_page=100`, {
-        signal: controller.signal,
-        credentials: 'include' // Include credentials for CORS
-      });
-      
-      clearTimeout(timeoutId);
-      
-      console.log('Response status:', response.status); // Debug log
-      console.log('Response headers:', [...response.headers.entries()]); // Debug log
-      
-      // Check if response is HTML (error page) instead of JSON
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        const errorText = await response.text();
-        console.error('Received HTML response instead of JSON:', errorText.substring(0, 200) + '...');
-        throw new Error(`Backend returned HTML instead of JSON. Server may be down or endpoint not found. Status: ${response.status}`);
-      }
-      
-      if (response.ok) {
-        const members = await response.json();
-        console.log('Loading members from backend:', members.length);
+    // If there's already an ongoing request, return that promise instead of making a new request
+    if (ongoingRequest) {
+      console.log('Request already in progress, returning existing promise');
+      return ongoingRequest;
+    }
+
+    const attemptRequest = async (retriesLeft: number): Promise<Member[]> => {
+      try {
+        console.log('Attempting to fetch from:', `${BACKEND_URL}/api/members`); // Debug log
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased to 30 seconds
         
-        // Process members to ensure they have the correct structure
-        const processedMembers = members.map((member: any) => {
-          // If the member has a MongoDB _id, store it in both _id and id fields
-          // This ensures compatibility with both backend and frontend operations
-          if (member._id && !member.id) {
-            return {
-              ...member,
-              id: member._id
-            };
-          }
-          // If the member already has both _id and id, make sure they're the same
-          if (member._id && member.id) {
-            return {
-              ...member,
-              id: member._id // Always use _id as the primary ID
-            };
-          }
-          return member;
+        // Add pagination parameters to improve performance
+        const fetchPromise = fetch(`${BACKEND_URL}/api/members?page=1&per_page=100`, {
+          signal: controller.signal,
+          credentials: 'include' // Include credentials for CORS
         });
         
-        // Cache the data
-        membersCache = {
-          data: processedMembers,
-          timestamp: now
-        };
+        // Store the promise to prevent duplicate requests
+        ongoingRequest = fetchPromise.then(async (response) => {
+          clearTimeout(timeoutId);
+          
+          console.log('Response status:', response.status); // Debug log
+          console.log('Response headers:', [...response.headers.entries()]); // Debug log
+          
+          // Check if response is HTML (error page) instead of JSON
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('text/html')) {
+            const errorText = await response.text();
+            console.error('Received HTML response instead of JSON:', errorText.substring(0, 200) + '...');
+            throw new Error(`Backend returned HTML instead of JSON. Server may be down or endpoint not found. Status: ${response.status}`);
+          }
+          
+          if (response.ok) {
+            const members = await response.json();
+            console.log('Loading members from backend:', members.length);
+            
+            // Process members to ensure they have the correct structure
+            const processedMembers = members.map((member: any) => {
+              // If the member has a MongoDB _id, store it in both _id and id fields
+              // This ensures compatibility with both backend and frontend operations
+              if (member._id && !member.id) {
+                return {
+                  ...member,
+                  id: member._id
+                };
+              }
+              // If the member already has both _id and id, make sure they're the same
+              if (member._id && member.id) {
+                return {
+                  ...member,
+                  id: member._id // Always use _id as the primary ID
+                };
+              }
+              return member;
+            });
+            
+            // Cache the data
+            membersCache = {
+              data: processedMembers,
+              timestamp: now
+            };
+            
+            return processedMembers;
+          } else {
+            const errorText = await response.text();
+            console.error('Backend error response:', errorText); // Debug log
+            throw new Error(`Backend returned status ${response.status}: ${errorText}`);
+          }
+        }).catch((error) => {
+          clearTimeout(timeoutId);
+          throw error;
+        });
         
-        return processedMembers;
-      } else {
-        const errorText = await response.text();
-        console.error('Backend error response:', errorText); // Debug log
-        throw new Error(`Backend returned status ${response.status}: ${errorText}`);
+        const members = await ongoingRequest;
+        return members;
+      } catch (error: any) {
+        if (retriesLeft > 0 && 
+            (error.name === 'AbortError' || 
+             (error instanceof TypeError && error.message.includes('fetch')) ||
+             (error.message && error.message.includes('timeout')))) {
+          console.log(`Request failed, retrying... (${retriesLeft} retries left)`);
+          // Wait 1 second before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return attemptRequest(retriesLeft - 1);
+        }
+        
+        if (error.name === 'AbortError') {
+          console.error('Request timeout while loading members from backend');
+          throw new Error('Request timeout - backend is taking too long to respond. Please check if the backend server is running and MongoDB is accessible.');
+        }
+        // Handle CORS errors specifically
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          console.error('Network error or CORS issue:', error);
+          throw new Error('Network error - unable to connect to backend server. Please ensure the backend server is running on http://localhost:5000 and there are no firewall restrictions.');
+        }
+        console.error('Error loading members from backend:', error);
+        // Return empty array - no localStorage fallback
+        throw error; // Re-throw the error so the UI can handle it properly
+      } finally {
+        // Clear the ongoing request tracker when complete (only on final attempt)
+        if (retriesLeft === 0 || !(ongoingRequest)) {
+          ongoingRequest = null;
+        }
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.error('Request timeout while loading members from backend');
-        throw new Error('Request timeout - backend is taking too long to respond. Please check if the backend server is running and MongoDB is accessible.');
-      }
-      // Handle CORS errors specifically
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.error('Network error or CORS issue:', error);
-        throw new Error('Network error - unable to connect to backend server. Please ensure the backend server is running on http://localhost:5000 and there are no firewall restrictions.');
-      }
-      console.error('Error loading members from backend:', error);
-      // Return empty array - no localStorage fallback
-      throw error; // Re-throw the error so the UI can handle it properly
-    }
+    };
+
+    // Start the request attempt
+    ongoingRequest = attemptRequest(retryCount);
+    return ongoingRequest;
   },
 
   // Invalidate cache when data changes

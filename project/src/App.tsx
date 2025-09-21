@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Download, LogOut, Dumbbell, BarChart3, Users, UserPlus, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Member } from './types/member';
 import { storageUtils, initializeStorage } from './utils/storage';
@@ -32,6 +32,9 @@ function App() {
     member: null
   });
 
+  // Ref to track ongoing requests
+  const loadMembersRef = useRef<Promise<any> | null>(null);
+
   useEffect(() => {
     // Initialize storage (backend or localStorage)
     const initStorage = async () => {
@@ -43,20 +46,32 @@ function App() {
     setIsAuthenticated(storageUtils.isAuthenticated());
   }, []);
 
-  // Create a memoized loadMembers function with better error handling
+  // Create a memoized loadMembers function with better error handling and debouncing
   const loadMembers = useCallback(async () => {
     if (!isAuthenticated) return;
+    
+    // If there's already a request in progress, don't start another one
+    if (loadMembersRef.current) {
+      console.log('Request already in progress, skipping...');
+      return;
+    }
     
     setLoading(true);
     setError(null);
     
     try {
-      const loadedMembers = await storageUtils.getMembers();
+      // Store the promise in ref to track ongoing requests
+      const promise = storageUtils.getMembers();
+      loadMembersRef.current = promise;
+      
+      const loadedMembers = await promise;
       setMembers(loadedMembers);
     } catch (err: any) {
       console.error('Error loading members:', err);
       setError(err.message || 'Failed to load members. Please try again.');
     } finally {
+      // Clear the ref when request completes
+      loadMembersRef.current = null;
       setLoading(false);
     }
   }, [isAuthenticated]);
