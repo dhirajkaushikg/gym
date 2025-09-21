@@ -168,7 +168,12 @@ def get_members():
         return response
         
     try:
-        members = list(members_collection.find())
+        # Add pagination support
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))  # Default to 50 members per page
+        skip = (page - 1) * per_page
+        
+        members = list(members_collection.find().skip(skip).limit(per_page))
         response = jsonify([member_to_dict(member) for member in members])
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
