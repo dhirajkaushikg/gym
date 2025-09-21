@@ -148,18 +148,8 @@ def health_check():
     
     return jsonify(status)
 
-# Add a specific CORS test endpoint
-@app.route('/cors-test', methods=['GET', 'OPTIONS'])
-def cors_test():
-    return jsonify({
-        'message': 'CORS headers are working correctly!',
-        'origin_received': request.headers.get('Origin', 'No Origin header'),
-        'method': request.method
-    })
-
-# Get all members with caching headers and concurrency limiting
+# Get all members with caching headers
 @app.route('/api/members', methods=['GET'])
-@limit_concurrent_requests
 def get_members():
     # Use in-memory storage if MongoDB is not available
     if members_collection is None:
